@@ -8,15 +8,12 @@ dotenv.config();
 const app = express();
 
 /* =====================
-   MIDDLEWARE
+   MIDDLEWARE (FIXED CORS)
 ===================== */
 app.use(cors({
-  origin: [
-    'http://localhost:5500',
-    'http://127.0.0.1:5500',
-    'https://finflow-expense-tracker.netlify.app'
-  ],
-  credentials: true
+  origin: "*", // ✅ allow Netlify + others
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
 app.use(express.json());
