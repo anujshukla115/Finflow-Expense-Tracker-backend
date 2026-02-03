@@ -11,10 +11,13 @@ const app = express();
    MIDDLEWARE (FIXED CORS)
 ===================== */
 app.use(cors({
-  origin: "*", // ✅ allow Netlify + others
+  origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
+
+app.options("*", cors());
+
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -71,3 +74,4 @@ const MONGO_URI = process.env.MONGODB_URI;
     console.error('❌ Startup failed', err.message);
   }
 })();
+
