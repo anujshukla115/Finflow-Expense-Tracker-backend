@@ -18,7 +18,7 @@ const authMiddleware = (req, res, next) => {
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-        // Attach userId to request (single source of truth)
+        // Attach userId to request
         req.userId = decoded.userId;
 
         next();
@@ -30,5 +30,4 @@ const authMiddleware = (req, res, next) => {
 };
 
 module.exports = authMiddleware;
-window.auth = new AuthService();
-
+// REMOVE THIS: window.auth = new AuthService();
