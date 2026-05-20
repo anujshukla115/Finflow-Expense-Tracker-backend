@@ -19,10 +19,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-// ✅ SIMPLE & SAFE CORS (works for Railway, Vercel, Netlify, localhost)
+// =======================
+// CORS
+// =======================
 app.use(
   cors({
-    origin: true, // allow all origins
+    origin: true,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]
@@ -32,20 +34,21 @@ app.use(
 // =======================
 // MongoDB Connection
 // =======================
-if (!process.env.MONGO_URI) {
-  console.error("❌ MONGO_URI not found in environment variables");
-  process.exit(1);
-}
+const connectDB = async () => {
+  try {
+    if (!process.env.MONGO_URI) {
+      throw new Error("MONGO_URI not found");
+    }
 
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => {
+    await mongoose.connect(process.env.MONGO_URI);
+
     console.log("✅ MongoDB Connected");
-  })
-  .catch((err) => {
-    console.error("❌ MongoDB connection failed:", err.message);
-    process.exit(1);
-  });
+  } catch (err) {
+    console.error("❌ MongoDB Connection Error:", err.message);
+  }
+};
+
+connectDB();
 
 // =======================
 // Routes
@@ -59,20 +62,23 @@ app.use("/api/categories", require("./routes/category"));
 app.use("/api/user", require("./routes/user"));
 
 // =======================
-// Health Check (Frontend + Railway)
+// Health Check
 // =======================
 app.get("/api/health", (req, res) => {
   res.status(200).json({
+    success: true,
     status: "OK",
     message: "FinFlow API is running",
-    uptime: process.uptime(),
     timestamp: new Date().toISOString()
   });
 });
 
-// Root route (Railway check)
+// =======================
+// Root Route
+// =======================
 app.get("/", (req, res) => {
   res.status(200).json({
+    success: true,
     name: "FinFlow Backend",
     status: "Running",
     environment: process.env.NODE_ENV || "development"
@@ -93,7 +99,7 @@ app.use((req, res) => {
 // Global Error Handler
 // =======================
 app.use((err, req, res, next) => {
-  console.error("❌ Error:", err.message);
+  console.error("❌ Server Error:", err);
 
   res.status(500).json({
     success: false,
@@ -102,11 +108,6 @@ app.use((err, req, res, next) => {
 });
 
 // =======================
-// Start Server (Railway compatible)
+// Export App for Vercel
 // =======================
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || "development"}`);
-});
+module.exports = app;
