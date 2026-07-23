@@ -1,148 +1,104 @@
-const express = require('express');
-const router = express.Router();
-const auth = require('../middleware/auth');
-const SplitExpense = require('../models/SplitExpense');
-
-// Get all split expenses
-router.get('/', auth, async (req, res) => {
-    try {
-        const splitExpenses = await SplitExpense.find({ 
-            user: req.userId 
-        }).sort({ date: -1 });
-        
-        res.json({
-            success: true,
-            splitExpenses
-        });
-    } catch (error) {
-        console.error('Get split expenses error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error' 
-        });
+// UPDATED: Settle Split Expense - marks ALL members as paid
+async function settleSplitExpense(id) {
+    const expense = splitExpenses.find(e => e._id === id);
+    if (!expense) {
+        showNotification('Split expense not found', 'error');
+        return;
     }
-});
 
-// Create split expense
-router.post('/', auth, async (req, res) => {
-    try {
-        const splitExpense = new SplitExpense({
-            user: req.userId,
-            ...req.body
-        });
-        
-        await splitExpense.save();
-        
-        res.status(201).json({
-            success: true,
-            message: 'Split expense created successfully',
-            splitExpense
-        });
-    } catch (error) {
-        console.error('Create split expense error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error' 
-        });
+    // Check if already settled
+    const allPaid = expense.members.every(m => m.isPaid);
+    if (allPaid) {
+        showNotification('All members are already paid!', 'info');
+        return;
     }
-});
 
-// Update split expense
-router.put('/:id', auth, async (req, res) => {
+    // Confirm with user
+    const confirmSettle = confirm(`Are you sure you want to mark ALL members as paid for "${expense.title}"?`);
+    if (!confirmSettle) return;
+
     try {
-        const splitExpense = await SplitExpense.findOneAndUpdate(
-            { _id: req.params.id, user: req.userId },
-            req.body,
-            { new: true, runValidators: true }
-        );
+        showNotification('Settling expense...', 'info');
         
-        if (!splitExpense) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'Split expense not found' 
-            });
+        // Use the new /settle endpoint
+        const data = await apiRequest(`/split/${id}/settle`, {
+            method: 'PATCH'
+        });
+
+        if (data.success) {
+            const index = splitExpenses.findIndex(e => e._id === id);
+            if (index !== -1) {
+                splitExpenses[index] = data.splitExpense;
+            }
+            showNotification('✅ All members settled successfully!', 'success');
+            updateSplitExpensesDisplay();
         }
-        
-        res.json({
-            success: true,
-            message: 'Split expense updated successfully',
-            splitExpense
-        });
     } catch (error) {
-        console.error('Update split expense error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error' 
-        });
+        console.error('Error settling expense:', error);
+        showNotification(error.message || 'Failed to settle expense. Please try again.', 'error');
     }
-});
+}
 
-// Delete split expense
-router.delete('/:id', auth, async (req, res) => {
+// UPDATED: Unsettle Split Expense - marks ALL members as unpaid
+async function unsettleSplitExpense(id) {
+    const expense = splitExpenses.find(e => e._id === id);
+    if (!expense) {
+        showNotification('Split expense not found', 'error');
+        return;
+    }
+
+    // Check if already unsettled
+    const allUnpaid = expense.members.every(m => !m.isPaid);
+    if (allUnpaid) {
+        showNotification('All members are already unpaid!', 'info');
+        return;
+    }
+
+    // Confirm with user
+    const confirmUnsettle = confirm(`Are you sure you want to mark ALL members as unpaid for "${expense.title}"?`);
+    if (!confirmUnsettle) return;
+
     try {
-        const splitExpense = await SplitExpense.findOneAndDelete({
-            _id: req.params.id,
-            user: req.userId
-        });
+        showNotification('Unsettling expense...', 'info');
         
-        if (!splitExpense) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'Split expense not found' 
-            });
-        }
-        
-        res.json({
-            success: true,
-            message: 'Split expense deleted successfully'
+        // Use the new /unsettle endpoint
+        const data = await apiRequest(`/split/${id}/unsettle`, {
+            method: 'PATCH'
         });
-    } catch (error) {
-        console.error('Delete split expense error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error' 
-        });
-    }
-});
 
-// Mark member as paid
-router.patch('/:id/member/:memberIndex/pay', auth, async (req, res) => {
+        if (data.success) {
+            const index = splitExpenses.findIndex(e => e._id === id);
+            if (index !== -1) {
+                splitExpenses[index] = data.splitExpense;
+            }
+            showNotification('All members marked as unpaid', 'success');
+            updateSplitExpensesDisplay();
+        }
+    } catch (error) {
+        console.error('Error unsettling expense:', error);
+        showNotification(error.message || 'Failed to unsettle expense', 'error');
+    }
+}
+
+// UPDATED: Mark individual member as paid/unpaid (toggle)
+async function markSplitMemberPaid(expenseId, memberIndex) {
     try {
-        const splitExpense = await SplitExpense.findOne({
-            _id: req.params.id,
-            user: req.userId
+        // The backend toggles the status, so if it's unpaid, it becomes paid
+        const data = await apiRequest(`/split/${expenseId}/member/${memberIndex}/pay`, {
+            method: 'PATCH'
         });
-        
-        if (!splitExpense) {
-            return res.status(404).json({ 
-                success: false, 
-                message: 'Split expense not found' 
-            });
-        }
-        
-        const memberIndex = parseInt(req.params.memberIndex);
-        if (memberIndex < 0 || memberIndex >= splitExpense.members.length) {
-            return res.status(400).json({ 
-                success: false, 
-                message: 'Invalid member index' 
-            });
-        }
-        
-        splitExpense.members[memberIndex].isPaid = !splitExpense.members[memberIndex].isPaid;
-        await splitExpense.save();
-        
-        res.json({
-            success: true,
-            message: 'Member payment status updated',
-            splitExpense
-        });
-    } catch (error) {
-        console.error('Update member payment error:', error);
-        res.status(500).json({ 
-            success: false, 
-            message: 'Server error' 
-        });
-    }
-});
 
-module.exports = router;
+        if (data.success) {
+            const index = splitExpenses.findIndex(e => e._id === expenseId);
+            if (index !== -1) {
+                splitExpenses[index] = data.splitExpense;
+            }
+            const member = data.splitExpense.members[memberIndex];
+            showNotification(`Member marked as ${member.isPaid ? 'paid' : 'unpaid'}!`, 'success');
+            updateSplitExpensesDisplay();
+        }
+    } catch (error) {
+        console.error('Error marking member:', error);
+        showNotification(error.message || 'Failed to update member status', 'error');
+    }
+}
