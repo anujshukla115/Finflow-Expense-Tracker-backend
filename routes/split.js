@@ -105,7 +105,7 @@ router.delete('/:id', auth, async (req, res) => {
     }
 });
 
-// Mark member as paid
+// Mark member as paid (toggle individual member)
 router.patch('/:id/member/:memberIndex/pay', auth, async (req, res) => {
     try {
         const splitExpense = await SplitExpense.findOne({
@@ -138,6 +138,90 @@ router.patch('/:id/member/:memberIndex/pay', auth, async (req, res) => {
         });
     } catch (error) {
         console.error('Update member payment error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error' 
+        });
+    }
+});
+
+// ================= NEW ENDPOINT: Settle all members =================
+// Mark ALL members as paid in one go
+router.patch('/:id/settle', auth, async (req, res) => {
+    try {
+        const splitExpense = await SplitExpense.findOne({
+            _id: req.params.id,
+            user: req.userId
+        });
+        
+        if (!splitExpense) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Split expense not found' 
+            });
+        }
+        
+        // Check if all members are already paid
+        const allPaid = splitExpense.members.every(member => member.isPaid);
+        if (allPaid) {
+            return res.json({
+                success: true,
+                message: 'All members are already paid',
+                splitExpense
+            });
+        }
+        
+        // Mark all members as paid
+        splitExpense.members.forEach(member => {
+            member.isPaid = true;
+        });
+        
+        await splitExpense.save();
+        
+        res.json({
+            success: true,
+            message: 'Split expense settled successfully',
+            splitExpense
+        });
+    } catch (error) {
+        console.error('Settle split expense error:', error);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Server error' 
+        });
+    }
+});
+
+// ================= NEW ENDPOINT: Unsettle all members =================
+// Mark ALL members as unpaid (reset)
+router.patch('/:id/unsettle', auth, async (req, res) => {
+    try {
+        const splitExpense = await SplitExpense.findOne({
+            _id: req.params.id,
+            user: req.userId
+        });
+        
+        if (!splitExpense) {
+            return res.status(404).json({ 
+                success: false, 
+                message: 'Split expense not found' 
+            });
+        }
+        
+        // Mark all members as unpaid
+        splitExpense.members.forEach(member => {
+            member.isPaid = false;
+        });
+        
+        await splitExpense.save();
+        
+        res.json({
+            success: true,
+            message: 'Split expense unsettled successfully',
+            splitExpense
+        });
+    } catch (error) {
+        console.error('Unsettle split expense error:', error);
         res.status(500).json({ 
             success: false, 
             message: 'Server error' 
